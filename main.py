@@ -1,44 +1,51 @@
-import json
+import yaml
+import sys
+import logging
+from src.utils import setup_logger, set_seed
 from src.data_preparation import DataPreparation
 from src.model_training import ModelTraining
 
-def main():
-    print("\033[1;32m[INFO] Starting End-to-End Hotel No-Show Prediction Pipeline...\033[0m")
+logger = setup_logger()
 
-    # Simple YAML reader fallback
-    config = {
-        'raw_data_path': './data/mini_project_2_data.csv',
-        'target_column': 'no_show',
-        'id_column': 'booking_id',
-        'sgd_to_usd_rate': 1.28,
-        'split_ratios': {'test_size': 0.20, 'val_size': 0.50, 'random_state': 42},
-        'numerical_features': ['price_usd', 'stay_duration', 'num_adults', 'num_children', 'arrival_day', 'checkout_day'],
-        'categorical_features': ['branch', 'booking_month', 'arrival_month', 'checkout_month', 'country', 'first_time', 'room', 'platform'],
-        'model_save_path': './models/best_no_show_model.joblib'
-    }
+def main(config_path: str = "config.yaml"):
+    logger.info("==================================================")
+    logger.info("Starting Refactored Hotel No-Show Prediction Pipeline")
+    logger.info("==================================================")
 
-    # Step 1: Data Preparation
+    # 1. Load Configuration
+    try:
+        with open(config_path, 'r') as f:
+            config = yaml.safe_load(f)
+        logger.info(f"Loaded runtime configuration from {config_path}")
+    except Exception as e:
+        logger.error(f"Failed to load configuration file at {config_path}: {e}")
+        sys.exit(1)
+
+    # 2. Set Global Reproducibility Seed
+    seed = config['split']['random_state']
+    set_seed(seed)
+    logger.info(f"Global random seed initialized to {seed}")
+
+    # 3. Data Preparation Phase
     data_prep = DataPreparation(config)
-    df_clean = data_prep.load_and_clean_data(config['raw_data_path'])
-    print(f"\033[1;32m[INFO] Cleaned dataset shape: {df_clean.shape}\033[0m")
+    data_path = config['data']['raw_path']
+    df = data_prep.load_and_clean_data(data_path)
 
+    # 4. Build Preprocessor
     preprocessor = data_prep.build_preprocessor()
 
-    # Step 2: Model Training & Evaluation
+    # 5. Model Training Phase
     trainer = ModelTraining(config, preprocessor)
-    X_train, X_val, X_test, y_train, y_val, y_test = trainer.split_data(df_clean)
+    X_train, X_val, X_test, y_train, y_val, y_test = trainer.split_data(df)
 
-    print("\033[1;32m[INFO] Training Baseline Models...\033[0m")
-    baseline_results = trainer.train_baselines(X_train, y_train, X_val, y_val)
-    print("Baseline Metrics (Validation Set):")
-    print(json.dumps(baseline_results, indent=2))
+    # 6. Train Baseline Candidate Models
+    best_name, best_pipe, baseline_results = trainer.train_and_evaluate_baselines(X_train, y_train, X_val, y_val)
 
-    print("\033[1;32m[INFO] Tuning Decision Tree & Persisting Artifacts...\033[0m")
-    best_model, best_params, test_metrics = trainer.tune_and_save(X_train, y_train, X_test, y_test)
-    print(f"Best Hyperparameters: {best_params}")
-    print("Final Holdout Test Evaluation Metrics:")
-    print(json.dumps(test_metrics, indent=2))
-    print("\033[1;32m[INFO] Pipeline Execution Successfully Completed!\033[0m")
+    # 7. Tune Hyperparameters, Optimize Decision Threshold, Evaluate & Persist Artifacts
+    final_pipeline = trainer.tune_and_save(best_pipe, X_train, y_train, X_val, y_val, X_test, y_test)
 
-if __name__ == '__main__':
-    main()
+    logger.info("Pipeline Execution Completed Successfully.")
+
+if __name__ == "__main__":
+    config_file = sys.argv[1] if len(sys.argv) > 1 else "config.yaml"
+    main(config_file)
