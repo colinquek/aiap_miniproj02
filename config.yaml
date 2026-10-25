@@ -1,0 +1,54 @@
+project_name: "Hotel No-Show Binary Classification Pipeline"
+version: "2.0.0"
+
+data:
+  raw_path: "./data/mini_project_2_data.csv"
+  target_column: "no_show"
+  required_columns:
+    - "no_show"
+    - "branch"
+    - "booking_platform"
+    - "first_time_customer"
+    - "room"
+    - "price"
+    - "num_adults"
+    - "num_children"
+    - "arrival_month"
+    - "arrival_day"
+    - "checkout_month"
+    - "checkout_day"
+
+split:
+  test_size: 0.2
+  val_size: 0.25 # 0.25 of remaining 80% = 20% total validation
+  random_state: 42
+  stratify: true
+
+features:
+  numerical_features:
+    - "price_usd"
+    - "stay_duration"
+    - "num_adults"
+    - "num_children"
+    - "total_guests"
+    - "price_per_night"
+    - "price_per_guest"
+    - "first_time_x_price"
+  categorical_features:
+    - "branch"
+    - "booking_platform"
+    - "room"
+    - "arrival_month"
+  ordinal_features: []
+  binary_features:
+    - "first_time_customer"
+
+models:
+  save_dir: "./models"
+  model_filename: "best_no_show_pipeline.joblib"
+  metrics_filename: "evaluation_metrics.json"
+  threshold_filename: "optimal_threshold.json"
+
+hyperparameters:
+  cv_folds: 5
+  scoring: "roc_auc"
